@@ -13,6 +13,52 @@
   </head>
   <body>
     <a href="../index.html">위로</a>
-    <h1>내용 준비중</h1>
+
+    <div class="container">
+      <h1>초단기 예보</h1>
+
+      <table class="table table-hover">
+        <thead>
+          <tr>
+            <th scope="col">일시</th>
+            <th scope="col">시각</th>
+            <th scope="col">온도</th>
+          </tr>
+        </thead>
+        <tbody id="target">
+          <!-- <tr>
+            <th scope="row">${}</th>
+            <td>${}</td>
+            <td>${}</td>
+          </tr> -->
+        </tbody>
+      </table>
+    </div>
   </body>
+  <script>
+    fetch(
+      `https://apis.data.go.kr/1360000/VilageFcstInfoService_2.0/getUltraSrtFcst?serviceKey=8a8963fa7a58dd6a5ff71a7355f4568c6a0ff183a2b571a580dfe30b6452154c&pageNo=1&numOfRows=1000&dataType=JSON&base_date=20260522&base_time=0630&nx=55&ny=127`,
+    )
+      .then(r => {
+        console.log(r);
+        return r.json();
+      })
+      .then(result => {
+        let data = result.response.body.items.item;
+        console.log(result.response.body.items.item);
+
+        let dT1H = data.filter(d => d.category == "T1H");
+        console.log(dT1H);
+
+        let tableData = "";
+        dT1H.forEach(d => {
+          tableData += `<tr>
+            <th scope="row">${d.fcstDate}</th>
+            <td>${d.fcstTime}</td>
+            <td>${d.fcstValue}</td>
+          </tr>`;
+        });
+        target.innerHTML = tableData;
+      });
+  </script>
 </html>
