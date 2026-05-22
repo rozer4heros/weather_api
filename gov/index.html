@@ -20,9 +20,11 @@
       <table class="table table-hover">
         <thead>
           <tr>
+            <th scope="col">&num;</th>
             <th scope="col">일시</th>
             <th scope="col">시각</th>
             <th scope="col">온도</th>
+            <th scope="col">습도</th>
           </tr>
         </thead>
         <tbody id="target">
@@ -37,7 +39,7 @@
   </body>
   <script>
     fetch(
-      `https://apis.data.go.kr/1360000/VilageFcstInfoService_2.0/getUltraSrtFcst?serviceKey=8a8963fa7a58dd6a5ff71a7355f4568c6a0ff183a2b571a580dfe30b6452154c&pageNo=1&numOfRows=1000&dataType=JSON&base_date=20260522&base_time=0630&nx=55&ny=127`,
+      `https://apis.data.go.kr/1360000/VilageFcstInfoService_2.0/getVilageFcst?serviceKey=8a8963fa7a58dd6a5ff71a7355f4568c6a0ff183a2b571a580dfe30b6452154c&pageNo=1&numOfRows=1000&dataType=JSON&base_date=20260522&base_time=0500&nx=55&ny=127`,
     )
       .then(r => {
         console.log(r);
@@ -47,15 +49,22 @@
         let data = result.response.body.items.item;
         console.log(result.response.body.items.item);
 
-        let dT1H = data.filter(d => d.category == "T1H");
-        console.log(dT1H);
+        let dTMP = data.filter(d => d.category == "TMP");
+        console.log(dTMP); // 온도
+        let dREH = data.filter(d => d.category == "REH");
+        console.log(dREH); // 습도
+        let asdf;
 
         let tableData = "";
-        dT1H.forEach(d => {
+        dTMP.forEach((d, idx) => {
+          // 데이터가 없으면 "-"
+          let rehData = dREH[idx]?.fcstValue || "-";
           tableData += `<tr>
-            <th scope="row">${d.fcstDate}</th>
+            <th scope="row">${idx + 1}</th>
+            <td>${d.fcstDate}</td>
             <td>${d.fcstTime}</td>
             <td>${d.fcstValue}</td>
+            <td>${rehData}</td>
           </tr>`;
         });
         target.innerHTML = tableData;
