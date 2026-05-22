@@ -1,0 +1,45 @@
+<!doctype html>
+<html lang="ko">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>다낭시 날씨</title>
+    <style>
+      .city-name,
+      .city-id {
+        font-size: 1rem;
+        color: #aaa;
+      }
+    </style>
+  </head>
+  <body>
+    <a href="index.html">위로</a>
+    <h1>다낭시<span class="city-name"></span> <span class="city-id">ID: 1583992</span></h1>
+    <h2>현재 날씨</h2>
+    <h3>날씨 설명: <span id="desc"></span></h3>
+    <img src="" alt="" id="desc-icon" />
+    <h3>습도: <span id="hum"></span></h3>
+    <h3>풍속: <span id="wspd"></span></h3>
+    <script>
+      const cname = document.querySelector(".city-name");
+      const cid = document.querySelector(".city-id");
+      const desc = document.querySelector("#desc");
+      const dicon = document.querySelector("#desc-icon");
+      const hum = document.querySelector("#hum");
+      const wspd = document.querySelector("#wspd");
+      fetch(
+        "https://api.openweathermap.org/data/2.5/weather?id=1583992&appid=adab1525c889f6a8468f20e35eef6381&units=metric",
+      )
+        .then(r => r.json())
+        .then(r => {
+          console.log(r);
+          cname.innerText = `${r.name}`;
+          cid.innerText = `ID: ${r.id}`;
+          desc.innerText = r.weather[0].description;
+          dicon.setAttribute("src", `https://openweathermap.org/payload/api/media/file/${r.weather[0].icon}.png`);
+          hum.innerText = r.main.humidity;
+          wspd.innerText = r.wind.speed;
+        });
+    </script>
+  </body>
+</html>

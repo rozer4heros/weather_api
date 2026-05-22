@@ -1,0 +1,41 @@
+<!doctype html>
+<html lang="ko">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Open Weather Map</title>
+  </head>
+  <body>
+    <a href="../index.html">위로</a>
+    <h1><span id="city">서울</span> 날씨</h1>
+    <p>현재 온도 : <span id="ctemp"></span></p>
+    <p>현재 습도 : <span id="chum"></span></p>
+    <img src="" alt="" id="icon" />
+    <a href="forecast.html">날씨 예보</a>
+    <a href="danang.html">다낭시 날씨</a>
+
+    <script>
+      const city = document.querySelector("#city");
+      const ctemp = document.querySelector("#ctemp");
+      const chum = document.querySelector("#chum");
+      const icon = document.querySelector("#icon");
+
+      fetch(
+        "https://api.openweathermap.org/data/2.5/weather?id=1835848&appid=adab1525c889f6a8468f20e35eef6381&units=metric",
+      )
+        .then(res => {
+          console.log(res);
+          return res.json();
+        })
+        .then(result => {
+          console.log(result);
+          console.log(result.main);
+          console.log(result.weather[0].icon);
+          city.innerText = result.name;
+          ctemp.innerText = result.main.temp;
+          chum.innerText = result.main.humidity;
+          icon.setAttribute("src", `https://openweathermap.org/payload/api/media/file/${result.weather[0].icon}.png`);
+        });
+    </script>
+  </body>
+</html>
