@@ -1,0 +1,364 @@
+<!doctype html>
+<html lang="ko">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>단기예보 조회</title>
+    <!-- Bootstrap CSS -->
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet" />
+    <style>
+      body {
+        padding: 20px;
+        background: #f8f9fa;
+      }
+      .card {
+        margin-bottom: 20px;
+      }
+      .table-fixed {
+        max-height: 420px;
+        overflow: auto;
+        display: block;
+      }
+      .table-fixed table {
+        width: 100%;
+      }
+      .page-item.disabled .page-link {
+        pointer-events: none;
+      }
+      .small-note {
+        font-size: 0.9rem;
+        color: #6c757d;
+      }
+    </style>
+  </head>
+  <body>
+    <div class="container">
+      <h3 class="mb-3">공공데이터 단기예보 조회</h3>
+
+      <div class="card">
+        <div class="card-body">
+          <div class="row g-3 align-items-end">
+            <div class="col-md-3">
+              <label class="form-label">엑셀 업로드</label>
+              <input id="fileInput" type="file" accept=".xlsx,.xls" class="form-control" />
+              <div class="small-note mt-1">격자 좌표(지역명, nx, ny)가 있는 엑셀을 업로드하세요.</div>
+            </div>
+
+            <div class="col-md-3">
+              <label class="form-label">지역 선택</label>
+              <select id="regionSelect" class="form-select">
+                <option value="">엑셀을 업로드하세요</option>
+              </select>
+            </div>
+
+            <div class="col-md-2">
+              <label class="form-label">기준 날짜</label>
+              <input id="baseDate" type="date" class="form-control" value="" />
+            </div>
+
+            <div class="col-md-2">
+              <label class="form-label">기준 시각</label>
+              <select id="baseTime" class="form-select">
+                <option value="0200">0200</option>
+                <option value="0500" selected>0500</option>
+                <option value="0800">0800</option>
+                <option value="1100">1100</option>
+                <option value="1400">1400</option>
+                <option value="1700">1700</option>
+                <option value="2000">2000</option>
+                <option value="2300">2300</option>
+              </select>
+            </div>
+
+            <div class="col-md-2 d-grid">
+              <button id="fetchBtn" class="btn btn-primary">조회</button>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div id="resultCard" class="card d-none">
+        <div class="card-body">
+          <h5 class="card-title">조회 결과</h5>
+          <div id="meta" class="mb-2 small-note"></div>
+
+          <div class="table-fixed">
+            <table class="table table-striped">
+              <thead class="table-light">
+                <tr>
+                  <th>예보일시</th>
+                  <th>항목</th>
+                  <th>값</th>
+                </tr>
+              </thead>
+              <tbody id="resultBody"></tbody>
+            </table>
+          </div>
+
+          <nav aria-label="Page navigation" class="mt-3">
+            <ul id="pagination" class="pagination"></ul>
+          </nav>
+        </div>
+      </div>
+
+      <div id="log" class="mt-3"></div>
+    </div>
+
+    <!-- SheetJS (xlsx) -->
+    <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
+    <!-- Bootstrap JS (optional for components) -->
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/js/bootstrap.bundle.min.js"></script>
+
+    <script>
+      // 기본 설정
+      const SERVICE_KEY = "8a8963fa7a58dd6a5ff71a7355f4568c6a0ff183a2b571a580dfe30b6452154c"; // 사용자가 제공한 키
+      const API_BASE = "https://apis.data.go.kr/1360000/VilageFcstInfoService_2.0/getVilageFcst";
+      const PAGE_SIZE = 10;
+
+      // 상태
+      let regionMap = {}; // { "지역명": {nx, ny} }
+      let currentItems = []; // [{fcstDate, fcstTime, category, obsrValue}]
+      let currentPage = 1;
+
+      // 엑셀 업로드 처리
+      document.getElementById("fileInput").addEventListener("change", e => {
+        const f = e.target.files[0];
+        if (!f) return;
+        const reader = new FileReader();
+        reader.onload = ev => {
+          const data = new Uint8Array(ev.target.result);
+          const workbook = XLSX.read(data, { type: "array" });
+          // 첫 시트 사용
+          const firstSheetName = workbook.SheetNames[0];
+          const sheet = workbook.Sheets[firstSheetName];
+          const json = XLSX.utils.sheet_to_json(sheet, { defval: "" });
+          parseExcelJson(json);
+        };
+        reader.readAsArrayBuffer(f);
+      });
+
+      function parseExcelJson(json) {
+        // 엑셀 구조가 다양할 수 있으므로 유연하게 처리
+        // 기대 컬럼명 예: 지역명, nx, ny 또는 NAME, NX, NY
+        regionMap = {};
+        json.forEach(row => {
+          // 가능한 키들
+          const keys = Object.keys(row);
+          // 찾기 시도
+          let name = row["지역명"] || row["name"] || row["NAME"] || row["지역"] || row[keys[0]];
+          let nx = row["nx"] || row["NX"] || row["X"] || row["격자X"] || row["lon"] || row["longitude"] || row["경도"];
+          let ny = row["ny"] || row["NY"] || row["Y"] || row["격자Y"] || row["lat"] || row["latitude"] || row["위도"];
+          // 숫자 변환
+          nx = nx === "" ? undefined : Number(nx);
+          ny = ny === "" ? undefined : Number(ny);
+          if (name && nx !== undefined && !isNaN(nx) && ny !== undefined && !isNaN(ny)) {
+            regionMap[String(name).trim()] = { nx: Math.round(nx), ny: Math.round(ny) };
+          }
+        });
+
+        const select = document.getElementById("regionSelect");
+        select.innerHTML = "";
+        const keys = Object.keys(regionMap);
+        if (keys.length === 0) {
+          select.innerHTML = '<option value="">엑셀에서 유효한 지역을 찾지 못했습니다</option>';
+          log("엑셀에서 지역을 찾지 못했습니다. 컬럼명을 확인하세요.");
+          return;
+        }
+        select.innerHTML = '<option value="">지역을 선택하세요</option>';
+        keys.forEach(k => {
+          const opt = document.createElement("option");
+          opt.value = k;
+          opt.textContent = k;
+          select.appendChild(opt);
+        });
+        log(`엑셀 업로드 완료: ${keys.length}개 지역 로드됨.`);
+      }
+
+      // 조회 버튼
+      document.getElementById("fetchBtn").addEventListener("click", async () => {
+        const regionName = document.getElementById("regionSelect").value;
+        const baseDate = document.getElementById("baseDate").value.replaceAll("-", "");
+        const baseTime = document.getElementById("baseTime").value;
+        if (!regionName) {
+          alert("지역을 선택하세요.");
+          return;
+        }
+        if (!baseDate) {
+          alert("기준 날짜를 선택하세요.");
+          return;
+        }
+        const coords = regionMap[regionName];
+        if (!coords) {
+          alert("선택한 지역의 좌표를 찾을 수 없습니다.");
+          return;
+        }
+
+        // API 호출
+        try {
+          const url = new URL(API_BASE);
+          url.searchParams.set("serviceKey", SERVICE_KEY);
+          url.searchParams.set("pageNo", "1");
+          url.searchParams.set("numOfRows", "1000");
+          url.searchParams.set("dataType", "JSON");
+          url.searchParams.set("base_date", baseDate);
+          url.searchParams.set("base_time", baseTime);
+          url.searchParams.set("nx", coords.nx);
+          url.searchParams.set("ny", coords.ny);
+
+          log("API 호출 중...");
+          const res = await fetch(url.toString());
+          if (!res.ok) throw new Error("네트워크 오류: " + res.status);
+          const data = await res.json();
+          // 응답 구조 확인 및 항목 추출
+          const items =
+            (data.response && data.response.body && data.response.body.items && data.response.body.items.item) || [];
+          if (!items || items.length === 0) {
+            log("조회 결과가 없습니다.");
+            showNoResult();
+            return;
+          }
+
+          // T1H(기온), REH(습도) 항목만 추출하고 예보일시 기준으로 정렬
+          const filtered = items
+            .filter(it => it.category === "T1H" || it.category === "REH")
+            .map(it => ({
+              fcstDate: it.fcstDate,
+              fcstTime: it.fcstTime,
+              category: it.category,
+              value: it.fcstValue || it.obsrValue || it.obsrValue,
+            }))
+            .sort((a, b) => {
+              const ta = a.fcstDate + a.fcstTime;
+              const tb = b.fcstDate + b.fcstTime;
+              return ta < tb ? -1 : ta > tb ? 1 : 0;
+            });
+
+          currentItems = filtered;
+          currentPage = 1;
+          renderResults(regionName, coords, baseDate, baseTime);
+          log(`조회 완료: ${filtered.length}개 항목 로드됨.`);
+        } catch (err) {
+          console.error(err);
+          log("오류: " + err.message);
+        }
+      });
+
+      function renderResults(regionName, coords, baseDate, baseTime) {
+        document.getElementById("resultCard").classList.remove("d-none");
+        document.getElementById("meta").textContent =
+          `지역: ${regionName} (nx:${coords.nx}, ny:${coords.ny}) · 기준: ${baseDate} ${baseTime}`;
+        renderPage(currentPage);
+        renderPagination();
+      }
+
+      function renderPage(page) {
+        const tbody = document.getElementById("resultBody");
+        tbody.innerHTML = "";
+        const start = (page - 1) * PAGE_SIZE;
+        const pageItems = currentItems.slice(start, start + PAGE_SIZE);
+        if (pageItems.length === 0) {
+          tbody.innerHTML = '<tr><td colspan="3">표시할 데이터가 없습니다.</td></tr>';
+          return;
+        }
+        pageItems.forEach(it => {
+          const tr = document.createElement("tr");
+          const dt = document.createElement("td");
+          dt.textContent = `${it.fcstDate} ${it.fcstTime}`;
+          const cat = document.createElement("td");
+          cat.textContent = it.category === "T1H" ? "기온(°C)" : "습도(%)";
+          const val = document.createElement("td");
+          val.textContent = it.value;
+          tr.appendChild(dt);
+          tr.appendChild(cat);
+          tr.appendChild(val);
+          tbody.appendChild(tr);
+        });
+      }
+
+      function renderPagination() {
+        const total = currentItems.length;
+        const pages = Math.max(1, Math.ceil(total / PAGE_SIZE));
+        const ul = document.getElementById("pagination");
+        ul.innerHTML = "";
+
+        const makePageItem = (p, label = null, disabled = false, active = false) => {
+          const li = document.createElement("li");
+          li.className = "page-item" + (disabled ? " disabled" : "") + (active ? " active" : "");
+          const a = document.createElement("a");
+          a.className = "page-link";
+          a.href = "#";
+          a.textContent = label || p;
+          a.addEventListener("click", e => {
+            e.preventDefault();
+            if (disabled) return;
+            currentPage = p;
+            renderPage(currentPage);
+            renderPagination();
+            window.scrollTo({ top: 0, behavior: "smooth" });
+          });
+          li.appendChild(a);
+          return li;
+        };
+
+        // Prev
+        ul.appendChild(makePageItem(Math.max(1, currentPage - 1), "‹", currentPage === 1));
+        // 페이지 번호 (간단한 범위 표시)
+        const range = 5;
+        let start = Math.max(1, currentPage - Math.floor(range / 2));
+        let end = Math.min(pages, start + range - 1);
+        if (end - start < range - 1) start = Math.max(1, end - range + 1);
+
+        if (start > 1) {
+          ul.appendChild(makePageItem(1, "1"));
+          if (start > 2) {
+            const li = document.createElement("li");
+            li.className = "page-item disabled";
+            li.innerHTML = '<span class="page-link">…</span>';
+            ul.appendChild(li);
+          }
+        }
+
+        for (let p = start; p <= end; p++) {
+          ul.appendChild(makePageItem(p, null, false, p === currentPage));
+        }
+
+        if (end < pages) {
+          if (end < pages - 1) {
+            const li = document.createElement("li");
+            li.className = "page-item disabled";
+            li.innerHTML = '<span class="page-link">…</span>';
+            ul.appendChild(li);
+          }
+          ul.appendChild(makePageItem(pages, String(pages)));
+        }
+
+        // Next
+        ul.appendChild(makePageItem(Math.min(pages, currentPage + 1), "›", currentPage === pages));
+      }
+
+      function showNoResult() {
+        document.getElementById("resultCard").classList.remove("d-none");
+        document.getElementById("meta").textContent = "조회 결과가 없습니다.";
+        document.getElementById("resultBody").innerHTML = '<tr><td colspan="3">데이터 없음</td></tr>';
+        document.getElementById("pagination").innerHTML = "";
+      }
+
+      function log(msg) {
+        const el = document.getElementById("log");
+        const p = document.createElement("div");
+        p.className = "small-note";
+        p.textContent = `[${new Date().toLocaleTimeString()}] ${msg}`;
+        el.prepend(p);
+      }
+
+      // 초기값: 오늘 날짜
+      (function init() {
+        const today = new Date();
+        const yyyy = today.getFullYear();
+        const mm = String(today.getMonth() + 1).padStart(2, "0");
+        const dd = String(today.getDate()).padStart(2, "0");
+        document.getElementById("baseDate").value = `${yyyy}-${mm}-${dd}`;
+      })();
+    </script>
+  </body>
+</html>
