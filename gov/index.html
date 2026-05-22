@@ -10,12 +10,18 @@
       integrity="sha384-sRIl4kxILFvY47J16cr9ZwB07vP4J8+LH7qKQnuqkuIAvNWLzeN8tE5YBujZqJLB"
       crossorigin="anonymous"
     />
+    <link rel="stylesheet" href="css/datepicker.material.css" />
+    <script src="datepicker.js"></script>
   </head>
   <body>
     <a href="../index.html">위로</a>
 
     <div class="container">
       <h1>초단기 예보</h1>
+      <form action="" id="dateForm">
+        <input type="text" id="datepicker" />
+        <button>조회</button>
+      </form>
 
       <table class="table table-hover">
         <thead>
@@ -38,36 +44,69 @@
     </div>
   </body>
   <script>
-    fetch(
-      `https://apis.data.go.kr/1360000/VilageFcstInfoService_2.0/getVilageFcst?serviceKey=8a8963fa7a58dd6a5ff71a7355f4568c6a0ff183a2b571a580dfe30b6452154c&pageNo=1&numOfRows=1000&dataType=JSON&base_date=20260522&base_time=0500&nx=55&ny=127`,
-    )
-      .then(r => {
-        console.log(r);
-        return r.json();
-      })
-      .then(result => {
-        let data = result.response.body.items.item;
-        console.log(result.response.body.items.item);
+    const target = document.querySelector("#target");
+    const datePicker = document.querySelector("#datepicker");
+    const dateForm = document.querySelector("#dateForm");
+    let datepicker = new Datepicker("#datepicker", {
+      // 1 day in the past
+      min: (() => {
+        var date = new Date();
+        date.setDate(date.getDate() - 2);
+        return date;
+      })(),
+      // today
+      max: (() => {
+        var date = new Date();
+        date.setDate(date.getDate());
+        return date;
+      })(),
+    });
+    let dateValue;
 
-        let dTMP = data.filter(d => d.category == "TMP");
-        console.log(dTMP); // 온도
-        let dREH = data.filter(d => d.category == "REH");
-        console.log(dREH); // 습도
-        let asdf;
+    dateForm.addEventListener("submit", e => {
+      e.preventDefault();
+      console.log(datePicker.value);
+      dateValue = datePicker.value
+        .replace(/\./g, "") // . 제거
+        .split(" ") // 공백을 기준으로 배열 변환
+        // 연도면(i==0) 값을 그대로 사용, 아니라면(i!=) 두 자리로 늘려서(padStart(2,"0")) 사용
+        .map((v, i) => (i === 0 ? v : v.padStart(2, "0")))
+        .join(""); // 배열을 다시 문자열로 병합
+      console.log(dateValue);
+      inqueryShortTermWeather(dateValue);
+    });
 
-        let tableData = "";
-        dTMP.forEach((d, idx) => {
-          // 데이터가 없으면 "-"
-          let rehData = dREH[idx]?.fcstValue || "-";
-          tableData += `<tr>
+    function inqueryShortTermWeather(date) {
+      fetch(
+        `https://apis.data.go.kr/1360000/VilageFcstInfoService_2.0/getVilageFcst?serviceKey=8a8963fa7a58dd6a5ff71a7355f4568c6a0ff183a2b571a580dfe30b6452154c&pageNo=1&numOfRows=1000&dataType=JSON&base_date=${date}&base_time=0500&nx=55&ny=127`,
+      )
+        .then(r => r.json())
+        .then(result => {
+          let data = result.response.body?.items.item || -1;
+          console.log(result?.response?.body?.items?.item || "자료가 없습니다");
+          if (data == -1) {
+            target.innerHTML = `<tr>
+            <th scope="row" colspan="5">자료가 없습니다</th></tr>`;
+            return;
+          }
+
+          let dTMP = data.filter(d => d.category == "TMP"); // 온도
+          let dREH = data.filter(d => d.category == "REH"); // 습도
+
+          let tableData = "";
+          dTMP.forEach((d, idx) => {
+            // 데이터가 없으면 "-"
+            let rehData = dREH[idx]?.fcstValue || "-";
+            tableData += `<tr>
             <th scope="row">${idx + 1}</th>
             <td>${d.fcstDate}</td>
             <td>${d.fcstTime}</td>
             <td>${d.fcstValue}</td>
             <td>${rehData}</td>
           </tr>`;
+          });
+          target.innerHTML = tableData;
         });
-        target.innerHTML = tableData;
-      });
+    }
   </script>
 </html>
